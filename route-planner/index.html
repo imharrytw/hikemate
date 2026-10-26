@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>好山友 - 路線規劃工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+
+    <style>
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .leaflet-container { cursor: crosshair; }
+        .sortable-ghost { opacity: 0.4; background-color: #f8fafc; }
+        .sortable-drag { cursor: grabbing !important; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans h-screen flex flex-col overflow-hidden relative">
+
+    <header class="bg-white shadow-sm border-b border-slate-200 px-3 sm:px-4 py-0 flex flex-col lg:flex-row justify-between items-center z-20 shrink-0 relative gap-3 lg:gap-0">
+        <div class="flex items-center w-full lg:w-auto">
+            <img src="banner.png" alt="好山友 - 路線規劃工具" width="300" height="100" class="w-[225px] h-[75px] object-contain shrink-0">
+        </div>
+
+        <div class="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto justify-between lg:justify-end py-2">
+            <div id="search-container" class="relative w-full sm:w-64 z-50">
+                <div class="flex shadow-sm rounded-md">
+                    <input type="text" id="search-input" placeholder="搜尋地點 (例: 台北車站)" class="flex-1 px-3 py-1.5 border border-slate-300 rounded-l-md text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 relative z-10" onkeydown="if(event.key === 'Enter') handleSearch()">
+                    <button onclick="handleSearch()" class="px-4 py-1.5 bg-emerald-600 text-white rounded-r-md text-sm hover:bg-emerald-700 transition whitespace-nowrap">搜尋</button>
+                </div>
+                <ul id="search-results" class="mt-1 flex flex-col max-h-100 overflow-y-auto empty:hidden absolute top-full left-0 right-0 bg-white border border-slate-200 rounded-md shadow-xl z-[1000]"></ul>
+            </div>
+
+            <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <button onclick="openCloudModal()" class="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md text-sm font-bold hover:bg-emerald-100 transition flex items-center gap-1.5 shadow-sm whitespace-nowrap">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    雲端紀錄
+                </button>
+
+                <label class="cursor-pointer px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md text-sm font-bold hover:bg-emerald-100 transition flex items-center gap-1.5 shadow-sm whitespace-nowrap m-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 0 0-1.883 2.542l.857 6a2.25 2.25 0 0 0 2.227 1.932H19.05a2.25 2.25 0 0 0 2.227-1.932l.857-6a2.25 2.25 0 0 0-1.883-2.542m-16.5 0V6A2.25 2.25 0 0 1 6 3.75h3.879a1.5 1.5 0 0 1 1.06.44l2.122 2.12a1.5 1.5 0 0 0 1.06.44H18A2.25 2.25 0 0 1 20.25 9v.776" />
+                    </svg>
+                    開啟 GPX
+                    <input type="file" id="open-gpx-input" accept=".gpx" class="hidden"/>
+                </label>
+                
+                <label class="cursor-pointer px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md text-sm font-bold hover:bg-emerald-100 transition flex items-center gap-1.5 shadow-sm whitespace-nowrap m-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/>
+                    </svg>
+                    參考 GPX
+                    <input type="file" id="ref-gpx-file-input" accept=".gpx" class="hidden" />
+                </label>
+
+                <button id="login-btn" onclick="openLoginModal()" class="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md text-sm font-bold hover:bg-emerald-100 transition flex items-center gap-1.5 shadow-sm whitespace-nowrap m-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                    </svg>
+                    <span id="login-btn-text">登入</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex-1 flex flex-col md:flex-row overflow-hidden relative z-10">
+
+        <aside class="w-full md:w-80 bg-white border-r border-slate-200 flex flex-col shrink-0 md:h-full h-1/3 min-h-[250px] shadow-[2px_0_10px_rgba(0,0,0,0.02)] z-10">
+            <div class="px-4 pt-4 pb-2 bg-slate-50 border-b border-slate-100 mt-2">
+                <div class="flex items-center gap-2 mb-2">
+                    <h2 class="font-bold text-slate-700">路線名稱</h2>
+                    <span id="route-creator-span" class="hidden text-[10px] font-normal text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-full"></span>
+                    <span id="unsaved-indicator-span" class="hidden flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                        尚未儲存
+                    </span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <input type="text" id="route-title" value="我的自訂路線" class="w-full px-3 py-1.5 border border-slate-300 rounded-md text-sm font-bold text-slate-700 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" placeholder="幫這條路線取個名字...">
+                </div>
+            </div>
+
+            <div class="px-4 py-2 flex-1 flex flex-col overflow-hidden bg-slate-50">
+                <div class="flex justify-between items-center mb-2">
+                    <div class="flex items-center gap-2">
+                        <h2 class="font-bold text-slate-700">航點</h2>
+                    </div>
+
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="copyWaypointsText()" id="copy-waypoints-btn" class="text-[11px] px-2 py-1 bg-emerald-50 text-emerald-700 border border-indigo-200 rounded hover:bg-indigo-100 transition flex items-center gap-1 shadow-sm whitespace-nowrap" title="複製文字版航點">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                            <span id="copy-waypoints-text">複製</span>
+                        </button>
+                        <button onclick="toggleSegmentStats()" id="toggle-segment-btn" class="text-[11px] px-2 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-100 transition flex items-center gap-1 shadow-sm whitespace-nowrap" title="切換顯示路段詳細資訊">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            <span id="toggle-segment-text">顯示路段</span>
+                        </button>
+                        <button onclick="clearRoute()" class="text-[11px] px-2 py-1 bg-rose-50 text-rose-700 border border-rose-200 rounded hover:bg-rose-100 transition flex items-center gap-1 shadow-sm whitespace-nowrap" title="清除所有地點">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            清空
+                        </button>
+                    </div>
+                </div>
+                <ul id="waypoints-list" class="flex-1 overflow-y-auto flex flex-col gap-1 mb-4 pb-2"><div class="text-sm text-slate-400 text-center mt-4">搜尋或點選地圖加入航點</div></ul>
+
+                <div class="mt-auto shrink-0 flex flex-col gap-2">
+                    <button onclick="calculateRoute()" id="calc-route-btn" class="w-full py-2.5 bg-emerald-600 text-white rounded-md text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition flex justify-center items-center gap-2" disabled>
+                        規劃路線
+                    </button>
+
+                    <div id="save-actions-grid" class="grid grid-cols-2 gap-2">
+                        <button onclick="saveToCloud()" id="save-cloud-btn" class="w-full py-2 bg-slate-100 text-slate-400 border border-slate-200 opacity-60 cursor-not-allowed rounded-md text-sm font-bold transition flex justify-center items-center gap-1.5" disabled title="請先加入航點並登入">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.25" d="M7 18a4 4 0 010-8 5 5 0 019.7-1.3A4 4 0 1117 18H7zm5-8v6m0-6l-3 3m3-3l3 3"/>
+                            </svg>
+                            儲存雲端
+                        </button>
+                        <button onclick="saveAsCopy()" id="save-copy-btn" class="w-full py-2 bg-slate-100 text-slate-400 border border-slate-200 opacity-60 cursor-not-allowed rounded-md text-sm font-bold transition flex justify-center items-center gap-1.5" disabled title="請先儲存路線">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.25" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"/>
+                            </svg>
+                            建立副本
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="openShareModalDirectly()" id="share-route-btn" class="w-full py-2 bg-slate-100 text-slate-400 border border-slate-200 opacity-60 cursor-not-allowed rounded-md text-sm font-bold transition flex justify-center items-center gap-1.5" disabled title="請先儲存路線">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                            分享路線
+                        </button>
+                        <button onclick="downloadGPX()" id="download-gpx-btn" class="w-full py-2 bg-slate-100 text-slate-400 border border-slate-200 opacity-60 cursor-not-allowed rounded-md text-sm font-bold transition flex justify-center items-center gap-1.5" disabled title="請先規劃路線">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                            </svg>
+                            下載 GPX
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+        </aside>
+
+        <main class="flex-1 flex flex-col min-w-0 bg-slate-100 z-0 relative">
+
+            <section id="map-container" class="flex-1 w-full relative min-h-[300px]">
+                <div id="map" class="w-full h-full z-0"></div>
+
+                <div id="mouse-coords" class="absolute bottom-6 left-6 z-[1000] bg-white/90 backdrop-blur px-3 py-1.5 rounded-md shadow text-xs font-mono text-slate-600 border border-slate-200 hidden">
+                    緯度: 0.00000, 經度: 0.00000
+                </div>
+
+                <button id="clear-ref-btn" onclick="clearReferenceRoutes()" class="absolute bottom-6 right-6 z-[1000] bg-white/90 backdrop-blur px-3 py-1.5 rounded-md shadow text-xs font-bold text-emerald-600 border border-emerald-200 hidden hover:bg-emerald-50 transition flex items-center gap-1.5">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    清除參考路線
+                </button>
+            </section>
+
+            <section id="chart-section" class="shrink-0 bg-white flex flex-col border-t border-slate-200 transition-all duration-300 z-10">
+                <div class="px-4 py-2 flex  items-center bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors border-b border-slate-100" onclick="toggleChart()">
+                    <button id="chart-toggle-btn" class="text-slate-500 hover:text-emerald-600 focus:outline-none">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transform transition-transform duration-200" id="chart-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+                    <div class="text-sm font-semibold text-slate-600">海拔剖面圖</div>
+                </div>
+                <div id="chart-container" class="h-[20vh] min-h-[160px] w-full relative p-2">
+                    <canvas id="elevation-chart"></canvas>
+                </div>
+            </section>
+
+            <section class="p-2 grid grid-cols-3 lg:grid-cols-6 gap-2 bg-white border-t border-slate-200 shrink-0 z-10">
+                <div class="bg-slate-50 py-1.5 px-2 rounded-md border border-slate-100 flex flex-col items-center text-center">
+                    <div class="text-[9px] text-slate-400 font-semibold uppercase tracking-wider mb-0.5">總距離</div>
+                    <div class="text-sm font-bold text-slate-700"><span id="stat-distance">0.00</span> <span class="text-[10px] font-normal text-slate-500">km</span></div>
+                </div>
+                <div class="bg-slate-50 py-1.5 px-2 rounded-md border border-slate-100 flex flex-col items-center text-center">
+                    <div class="text-[9px] text-slate-400 font-semibold uppercase tracking-wider mb-0.5">累積爬升</div>
+                    <div class="text-sm font-bold text-slate-700"><span id="stat-gain">0</span> <span class="text-[10px] font-normal text-slate-500">m</span></div>
+                </div>
+                <div class="bg-slate-50 py-1.5 px-2 rounded-md border border-slate-100 flex flex-col items-center text-center">
+                    <div class="text-[9px] text-slate-400 font-semibold uppercase tracking-wider mb-0.5">累積下降</div>
+                    <div class="text-sm font-bold text-slate-700"><span id="stat-loss">0</span> <span class="text-[10px] font-normal text-slate-500">m</span></div>
+                </div>
+                <div class="bg-slate-50 py-1.5 px-2 rounded-md border border-slate-100 flex flex-col items-center text-center">
+                    <div class="text-[9px] text-slate-400 font-semibold uppercase tracking-wider mb-0.5">最高點</div>
+                    <div class="text-sm font-bold text-slate-700"><span id="stat-max-ele">0</span> <span class="text-[10px] font-normal text-slate-500">m</span></div>
+                </div>
+                <div class="bg-slate-50 py-1.5 px-2 rounded-md border border-slate-100 flex flex-col items-center text-center">
+                    <div class="text-[9px] text-slate-400 font-semibold uppercase tracking-wider mb-0.5">最低點</div>
+                    <div class="text-sm font-bold text-slate-700"><span id="stat-min-ele">0</span> <span class="text-[10px] font-normal text-slate-500">m</span></div>
+                </div>
+                <div class="bg-slate-50 py-1.5 px-2 rounded-md border border-slate-100 flex flex-col items-center text-center">
+                    <div class="text-[9px] text-slate-400 font-semibold uppercase tracking-wider mb-0.5">軌跡點數</div>
+                    <div class="text-sm font-bold text-slate-700"><span id="stat-points">0</span></div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <div id="full-page-loader" class="fixed inset-0 bg-white z-[3000] flex flex-col items-center justify-center hidden">
+        <svg class="animate-spin h-12 w-12 text-emerald-600 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+        <h2 class="text-xl font-bold text-slate-700">正在展開分享的路線...</h2>
+        <p class="text-slate-500 mt-2 text-sm" id="loader-msg">讀取雲端資料與規劃路徑，請稍候</p>
+    </div>
+
+    <div id="share-modal" class="fixed inset-0 bg-slate-900/60 hidden z-[2000] flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden transform transition-all">
+            <div class="p-4 py-2 border-b border-emerald-100 flex justify-between items-center bg-emerald-50">
+                <h3 class="font-bold text-emerald-800 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                    分享路線
+                </h3>
+                <button onclick="closeShareModal()" class="text-emerald-400 hover:text-emerald-700 bg-white rounded-full p-1 transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            <div class="p-6 bg-white">
+                <p class="text-sm text-slate-600 mb-3">複製連結傳送給朋友</p>
+                <div class="flex gap-2">
+                    <input type="text" id="share-link-input" readonly class="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-md text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <button onclick="copyShareLink()" id="copy-link-btn" class="px-4 py-2 bg-emerald-600 text-white rounded-md text-sm font-bold hover:bg-emerald-700 transition whitespace-nowrap">
+                        複製
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="cloud-modal" class="fixed inset-0 bg-slate-900/60 hidden z-[2000] flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[85vh] overflow-hidden transform transition-all">
+            <div class="px-4 py-2 border-b border-slate-100 flex justify-between items-center bg-emerald-50">
+                <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    雲端紀錄
+                </h3>
+                <button onclick="closeCloudModal()" class="text-emerald-400 hover:text-emerald-700 bg-white rounded-full p-1 border border-slate-200 transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            <div class="p-4 overflow-y-auto flex-1 bg-slate-50/50">
+                <ul id="cloud-routes-list" class="space-y-3">
+                    <!-- 列表生成區 -->
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- 登入 Modal -->
+    <div id="login-modal" class="fixed inset-0 bg-slate-900/60 hidden z-[2000] flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden transform transition-all">
+            <div class="px-4 py-2 border-b border-slate-100 flex justify-between items-center bg-emerald-50">
+                <h3 class="font-bold text-emerald-800 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
+                    系統登入
+                </h3>
+                <button onclick="closeLoginModal()" class="text-emerald-400 hover:text-emerald-700 bg-white rounded-full p-1 transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            <div class="p-6 bg-white">
+                <form id="login-form" onsubmit="handleLogin(event)">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-slate-700 mb-1">帳號</label>
+                        <input type="text" id="login-username" required class="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                    </div>
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-slate-700 mb-1">密碼</label>
+                        <input type="password" id="login-password" required class="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                    </div>
+                    <button type="submit" id="submit-login-btn" class="w-full py-2 bg-emerald-600 text-white rounded-md font-bold hover:bg-emerald-700 transition">確認登入</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 建立副本 Modal -->
+    <div id="copy-modal" class="fixed inset-0 bg-slate-900/60 hidden z-[2000] flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden transform transition-all">
+            <div class="px-4 py-2 border-b border-slate-100 flex justify-between items-center bg-emerald-50">
+                <h3 class="font-bold text-emerald-800 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                    </svg>
+                    建立副本
+                </h3>
+                <button onclick="closeCopyModal()" class="text-emerald-400 hover:text-emerald-700 bg-white rounded-full p-1 transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            <div class="p-6 bg-white">
+                <form id="copy-form" onsubmit="confirmSaveAsCopy(event)">
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-slate-700 mb-1">修改路線名稱</label>
+                        <input type="text" id="copy-route-title" required class="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                    </div>
+                    <div class="flex gap-3">
+                        <button type="submit" id="submit-copy-btn" class="w-1/2 py-2 bg-emerald-600 text-white rounded-md font-bold hover:bg-emerald-700 transition flex justify-center items-center">確定</button>
+                        <button type="button" onclick="closeCopyModal()" class="w-1/2 py-2 bg-slate-100 text-slate-600 rounded-md font-bold hover:bg-slate-200 transition">取消</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 編輯航點名稱 Modal -->
+    <div id="edit-waypoint-modal" class="fixed inset-0 bg-slate-900/60 hidden z-[2000] flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden transform transition-all">
+            <div class="px-4 py-2 border-b border-slate-100 flex justify-between items-center bg-emerald-50">
+                <h3 class="font-bold text-emerald-800 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                    編輯航點名稱
+                </h3>
+                <button onclick="closeEditModal()" type="button" class="text-emerald-400 hover:text-emerald-700 bg-white rounded-full p-1 transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            <div class="p-6 bg-white">
+                <form id="edit-waypoint-form" onsubmit="confirmEditWaypointName(event)">
+                    <div class="mb-6">
+                        <input type="text" id="edit-waypoint-input" required class="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                    </div>
+                    <div class="flex gap-3">
+                        <button type="submit" class="w-1/2 py-2 bg-emerald-600 text-white rounded-md font-bold hover:bg-emerald-700 transition flex justify-center items-center">確定</button>
+                        <button type="button" onclick="closeEditModal()" class="w-1/2 py-2 bg-slate-100 text-slate-600 rounded-md font-bold hover:bg-slate-200 transition">取消</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 刪除確認 Modal -->
+    <div id="delete-confirm-modal" class="fixed inset-0 bg-slate-900/60 hidden z-[3000] flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden transform transition-all">
+            <div class="px-4 py-2 border-b border-rose-100 flex justify-between items-center bg-rose-50">
+                <h3 class="font-bold text-rose-800 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    確認刪除
+                </h3>
+                <button onclick="closeDeleteModal()" type="button" class="text-rose-400 hover:text-rose-700 bg-white rounded-full p-1 transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            <div class="p-6 bg-white">
+                <p class="text-slate-700 mb-6 text-sm leading-relaxed" id="delete-confirm-message">確定要刪除這條路線嗎？此動作無法復原。</p>
+                <div class="flex gap-3">
+                    <button onclick="confirmDeleteRoute()" id="confirm-delete-btn" class="w-1/2 py-2 bg-rose-600 text-white rounded-md font-bold hover:bg-rose-700 transition flex justify-center items-center">確定</button>
+                    <button onclick="closeDeleteModal()" class="w-1/2 py-2 bg-slate-100 text-slate-600 rounded-md font-bold hover:bg-slate-200 transition">取消</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="./app.js" defer></script>
+</body>
+</html>
