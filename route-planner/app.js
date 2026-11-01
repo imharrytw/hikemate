@@ -109,10 +109,12 @@ function initMap() {
     });
 
     refRouteGroup = L.layerGroup().addTo(map);
+    setTimeout(() => map && map.invalidateSize(), 100);
 }
 
 // 綁定 UI 介面上所有監聽事件
 function setupEventListeners() {
+    window.addEventListener('resize', () => map && map.invalidateSize());
     document.getElementById('open-gpx-input').addEventListener('change', handleOpenGPX);
     document.getElementById('ref-gpx-file-input').addEventListener('change', handleRefFileUpload);
 
@@ -476,6 +478,9 @@ async function calculateRoute() {
 
         updateWaypointsUI();
         if (gpxPolyline) map.fitBounds(gpxPolyline.getBounds(), { padding: [50, 50] });
+        if (window.innerWidth < 768) {
+            document.getElementById('map-container')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
 
     } catch (err) {
         alert("路線計算發生錯誤:\n" + err.message);
@@ -1036,7 +1041,7 @@ function drawChart() {
             }]
         },
         options: {
-            responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+            responsive: true, maintainAspectRatio: false, events: ['mousemove', 'mouseout', 'click', 'touchstart', 'touchmove'], interaction: { mode: 'index', intersect: false },
             plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)', callbacks: { title: ctx => [`距離: ${ctx[0].label} km`, `海拔: ${ctx[0].parsed.y.toFixed(1)} m`], label: ctx => null } } },
             scales: { x: { title: { display: true, text: '距離 (km)' }, ticks: { maxTicksLimit: 10 } }, y: { title: { display: true, text: '海拔 (m)' } } },
             onHover: (event, chartElement) => chartElement.length > 0 ? updateSyncMarker(chartElement[0].index) : hideSyncMarker()
